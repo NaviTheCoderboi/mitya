@@ -1,0 +1,30 @@
+# Build directories
+build/
+cmake-build-*/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+CTestTestfile.cmake
+cmake_install.cmake
+compile_commands.json
+Makefile
+
+# Ninja
+.ninja_deps
+.ninja_log
+build.ninja
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+.cache/
+
+tmp/
+
+# it's a temporary file, i usually use it to put all code of my project, so i can share on discord for help
+code.txt 
