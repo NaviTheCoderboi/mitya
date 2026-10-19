@@ -1,5 +1,6 @@
 #include <iostream>
-#include <mitya/image.hpp>
+
+#include "mitya/image.hpp"
 
 int main(void) {
     constexpr std::uint32_t size = 512;
@@ -33,7 +34,7 @@ int main(void) {
         }
     }
 
-    auto saved = image.save("chessboard.ppm", mitya::Format::Pnm);
+    auto saved = image.save("chessboard.png", mitya::Format::Png);
 
     if (!saved) {
         std::cerr << mitya::to_string(saved.error()) << '\n';

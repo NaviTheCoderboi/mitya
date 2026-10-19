@@ -13,29 +13,30 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(SRC_DIR src)
-set(INCLUDE_DIR include)
-
-add_executable(${PROJECT_NAME} ${SRC_DIR}/main.cpp)
-
-file(GLOB_RECURSE SRC_FILES ${SRC_DIR}/*.c ${SRC_DIR}/*.cpp)
-file(GLOB_RECURSE HEADER_FILES ${INCLUDE_DIR}/*.h ${INCLUDE_DIR}/*.hpp)
+add_library(mitya)
+add_library(mitya::mitya ALIAS mitya)
 
 target_sources(${PROJECT_NAME} PRIVATE
-    ${SRC_FILES}
-    ${HEADER_FILES}
+    src/image.c
 )
-target_include_directories(${PROJECT_NAME} PRIVATE
-    ${SRC_DIR}
-    ${INCLUDE_DIR}
+target_include_directories(mitya
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 
 target_compile_options(${PROJECT_NAME} PRIVATE
-    $<$<COMPILE_LANGUAGE:C>:-Wall;-Wextra;-Wpedantic;-fno-exceptions>
-    $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic;-fno-exceptions>
+    $<$<COMPILE_LANGUAGE:C>:-Wall;-Wextra;-Wpedantic>
+    $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic>
 )
 
-option(MITYA_ENABLE_PNG "Enable PNG codec" ON)
+option(MITYA_BUILD_EXAMPLES "Build examples" ON)
+
+if(MITYA_BUILD_EXAMPLES)
+    add_executable(chessboard examples/chessboard.cpp)
+    target_link_libraries(chessboard PRIVATE mitya)
+endif()
+
+option(MITYA_ENABLE_PNG "Enable PNG codec" OFF)
 
 if(MITYA_ENABLE_PNG)
     find_package(PNG REQUIRED)
@@ -44,7 +45,7 @@ if(MITYA_ENABLE_PNG)
     target_link_libraries(${PROJECT_NAME} PRIVATE PNG::PNG m)
 endif()
 
-option(MITYA_ENABLE_PNM "Enable PNM codec" ON)
+option(MITYA_ENABLE_PNM "Enable PNM codec" OFF)
 if(MITYA_ENABLE_PNM)
     target_sources(${PROJECT_NAME} PRIVATE src/codec_pnm.c)
     target_compile_definitions(${PROJECT_NAME} PRIVATE MITYA_ENABLE_PNM)
