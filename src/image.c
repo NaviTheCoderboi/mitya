@@ -7,6 +7,22 @@
 
 #include "mitya/codecs.h"
 
+#ifdef MITYA_USER_CODECS_HEADER
+
+#define MITYA_X_EXTERN(name, symbol) extern const mitya_codec_t symbol;
+MITYA_USER_CODECS(MITYA_X_EXTERN)
+#undef MITYA_X_EXTERN
+
+#define MITYA_X_POINTER(name, symbol) &symbol,
+static const mitya_codec_t* const _mitya_user_codecs[] = {
+    MITYA_USER_CODECS(MITYA_X_POINTER) NULL};
+#undef MITYA_X_POINTER
+
+#define MITYA_USER_CODEC_COUNT \
+    (sizeof(_mitya_user_codecs) / sizeof(_mitya_user_codecs[0]) - 1)
+
+#endif
+
 // a empty codec just to make sure the array is not empty, so that the code
 // compiles without warnings
 static mitya_image_result_t _mitya_empty_probe(const void* buffer,
@@ -165,6 +181,15 @@ static const mitya_codec_t* _mitya_find_codec(mitya_image_format_t format) {
 
     if ((size_t)format >= MITYA_CODEC_COUNT) return NULL;
 
+#ifdef MITYA_USER_CODECS_HEADER
+    if ((int)format > (int)MITYA_IMAGE_FORMAT_USER_BASE) {
+        size_t i =
+            (size_t)((int)format - (int)MITYA_IMAGE_FORMAT_USER_BASE - 1);
+
+        return i < MITYA_USER_CODEC_COUNT ? _mitya_user_codecs[i] : NULL;
+    }
+#endif
+
     return mitya_codecs[format];
 }
 
@@ -179,6 +204,16 @@ static const mitya_codec_t* _mitya_probe_codecs(const void* buffer,
             codec->probe(buffer, buffer_size) == MITYA_IMAGE_SUCCESS)
             return codec;
     }
+
+#ifdef MITYA_USER_CODECS_HEADER
+    for (size_t i = 0; i < MITYA_USER_CODEC_COUNT; i++) {
+        const mitya_codec_t* codec = _mitya_user_codecs[i];
+
+        if (codec && codec->probe &&
+            codec->probe(buffer, buffer_size) == MITYA_IMAGE_SUCCESS)
+            return codec;
+    }
+#endif
 
     return NULL;
 }

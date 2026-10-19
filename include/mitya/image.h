@@ -4,6 +4,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef MITYA_USER_CODECS_HEADER
+#include MITYA_USER_CODECS_HEADER
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -32,6 +36,14 @@ typedef enum {
     MITYA_IMAGE_FORMAT_UNKNOWN,
     MITYA_IMAGE_FORMAT_PNG,
     MITYA_IMAGE_FORMAT_PNM,
+
+    MITYA_IMAGE_FORMAT_USER_BASE = 0x1000,
+#ifdef MITYA_USER_CODECS_HEADER
+#define MITYA_X_FORMAT_ENUM(name, symbol) MITYA_IMAGE_FORMAT_##name,
+    MITYA_USER_CODECS(MITYA_X_FORMAT_ENUM)
+#undef MITYA_X_FORMAT_ENUM
+#endif
+
 } mitya_image_format_t;
 
 typedef struct {

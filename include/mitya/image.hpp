@@ -37,7 +37,14 @@ enum class PixelType : int {
 enum class Format : int {
     Unknown = MITYA_IMAGE_FORMAT_UNKNOWN,
     Png = MITYA_IMAGE_FORMAT_PNG,
-    Pnm = MITYA_IMAGE_FORMAT_PNM
+    Pnm = MITYA_IMAGE_FORMAT_PNM,
+
+#ifdef MITYA_USER_CODECS_HEADER
+#define MITYA_X_FORMAT_CLASS(name, symbol) name = MITYA_IMAGE_FORMAT_##name,
+    MITYA_USER_CODECS(MITYA_X_FORMAT_CLASS)
+#undef MITYA_X_FORMAT_CLASS
+#endif
+
 };
 
 template <class T>
