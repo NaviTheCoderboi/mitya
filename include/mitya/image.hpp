@@ -13,6 +13,10 @@
 
 #include "image.h"
 
+#if __cplusplus < 202300L
+#error "C++23 or later is required"
+#endif
+
 namespace mitya {
 
 enum class Result : int {

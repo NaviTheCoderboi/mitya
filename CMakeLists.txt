@@ -34,6 +34,9 @@ option(MITYA_BUILD_EXAMPLES "Build examples" ON)
 if(MITYA_BUILD_EXAMPLES)
     add_executable(chessboard examples/chessboard.cpp)
     target_link_libraries(chessboard PRIVATE mitya)
+
+    add_executable(empty examples/empty.cpp)
+    target_link_libraries(empty PRIVATE mitya)
 endif()
 
 option(MITYA_ENABLE_PNG "Enable PNG codec" OFF)
