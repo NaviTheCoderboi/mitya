@@ -69,7 +69,7 @@ static int _mitya_type_is_float(mitya_image_pixel_type_t type) {
     return type == MITYA_IMAGE_TYPE_F32 || type == MITYA_IMAGE_TYPE_F64;
 }
 
-static size_t _mitya_bytes_per_pixel(mitya_image_pixel_type_t type) {
+size_t mitya_sample_size(mitya_image_pixel_type_t type) {
     switch (type) {
         case MITYA_IMAGE_TYPE_U8:
             return 1;
@@ -147,8 +147,8 @@ static mitya_image_result_t _mitya_convert_pixels(const mitya_image_t* src,
         src->channels != dst->channels)
         return MITYA_IMAGE_ERROR_INVALID_ARGUMENT;
 
-    size_t src_bpp = _mitya_bytes_per_pixel(src->type);
-    size_t dst_bpp = _mitya_bytes_per_pixel(dst->type);
+    size_t src_bpp = mitya_sample_size(src->type);
+    size_t dst_bpp = mitya_sample_size(dst->type);
     if (src_bpp == 0 || dst_bpp == 0) return MITYA_IMAGE_ERROR_INVALID_ARGUMENT;
 
     size_t samples_per_row = (size_t)src->width * src->channels;
@@ -179,16 +179,15 @@ static mitya_image_result_t _mitya_convert_pixels(const mitya_image_t* src,
 static const mitya_codec_t* _mitya_find_codec(mitya_image_format_t format) {
     if (format == MITYA_IMAGE_FORMAT_UNKNOWN) return NULL;
 
-    if ((size_t)format >= MITYA_CODEC_COUNT) return NULL;
-
 #ifdef MITYA_USER_CODECS_HEADER
-    if ((int)format > (int)MITYA_IMAGE_FORMAT_USER_BASE) {
-        size_t i =
-            (size_t)((int)format - (int)MITYA_IMAGE_FORMAT_USER_BASE - 1);
+    if ((size_t)format > (size_t)MITYA_IMAGE_FORMAT_USER_BASE) {
+        size_t i = (size_t)format - (size_t)MITYA_IMAGE_FORMAT_USER_BASE - 1;
 
         return i < MITYA_USER_CODEC_COUNT ? _mitya_user_codecs[i] : NULL;
     }
 #endif
+
+    if ((size_t)format >= MITYA_CODEC_COUNT) return NULL;
 
     return mitya_codecs[format];
 }
@@ -227,7 +226,7 @@ mitya_image_result_t mitya_image_create(mitya_image_t* image, uint32_t width,
 
     memset(image, 0, sizeof(*image));
 
-    size_t bpp = _mitya_bytes_per_pixel(type);
+    size_t bpp = mitya_sample_size(type);
     if (bpp == 0) return MITYA_IMAGE_ERROR_INVALID_ARGUMENT;
 
     size_t pixel_size = bpp * (size_t)channels;
@@ -250,7 +249,6 @@ mitya_image_result_t mitya_image_create(mitya_image_t* image, uint32_t width,
     image->channels = channels;
     image->type = type;
     image->row_stride = row_stride;
-    image->plane_stride = row_stride;
     image->pixels = pixels;
     image->data_size = data_size;
 
@@ -270,7 +268,7 @@ mitya_image_result_t mitya_image_load_from_buffer(
     if (!image || !buffer || buffer_size == 0)
         return MITYA_IMAGE_ERROR_INVALID_ARGUMENT;
 
-    if (_mitya_bytes_per_pixel(desired_type) == 0)
+    if (mitya_sample_size(desired_type) == 0)
         return MITYA_IMAGE_ERROR_INVALID_ARGUMENT;
 
     memset(image, 0, sizeof(*image));
@@ -303,8 +301,15 @@ mitya_image_result_t mitya_image_load_from_buffer(
             return res;
         }
 
-        _mitya_convert_pixels(image, &converted);
+        res = _mitya_convert_pixels(image, &converted);
         mitya_image_destroy(image);
+
+        if (res != MITYA_IMAGE_SUCCESS) {
+            mitya_image_destroy(&converted);
+
+            return res;
+        }
+
         *image = converted;
     }
 
@@ -316,48 +321,41 @@ mitya_image_result_t mitya_image_load_from_file(
     mitya_image_pixel_type_t desired_type) {
     if (!image || !filename) return MITYA_IMAGE_ERROR_INVALID_ARGUMENT;
 
+    memset(image, 0, sizeof(*image));
+
     FILE* fp = fopen(filename, "rb");
     if (!fp)
         return (errno == ENOENT) ? MITYA_IMAGE_ERROR_FILE_NOT_FOUND
                                  : MITYA_IMAGE_ERROR_IO;
 
     mitya_image_result_t res = MITYA_IMAGE_ERROR_IO;
+    void* buffer = NULL;
 
-    if (fseek(fp, 0, SEEK_END) != 0) {
-        fclose(fp);
-        return res;
-    }
+    if (fseek(fp, 0, SEEK_END) != 0) goto done;
 
     long size = ftell(fp);
-    if (size < 0) {
-        fclose(fp);
-        return res;
+    if (size < 0) goto done;
+
+    if (size == 0) {
+        res = MITYA_IMAGE_ERROR_DECODE_FAILED;
+        goto done;
     }
 
-    if (fseek(fp, 0, SEEK_SET) != 0) {
-        fclose(fp);
-        return res;
-    }
+    if (fseek(fp, 0, SEEK_SET) != 0) goto done;
 
-    void* buffer = malloc((size_t)size);
+    buffer = malloc((size_t)size);
     if (!buffer) {
         res = MITYA_IMAGE_ERROR_OUT_OF_MEMORY;
-
-        fclose(fp);
-        return res;
+        goto done;
     }
 
-    if (fread(buffer, 1, (size_t)size, fp) != (size_t)size) {
-        free(buffer);
-
-        fclose(fp);
-        return res;
-    }
+    if (fread(buffer, 1, (size_t)size, fp) != (size_t)size) goto done;
 
     res = mitya_image_load_from_buffer(image, buffer, (size_t)size, format,
                                        desired_type);
-    free(buffer);
 
+done:
+    free(buffer);
     fclose(fp);
     return res;
 }
@@ -369,7 +367,9 @@ mitya_image_result_t mitya_image_save_to_buffer(
         image->channels == 0 || !buffer || !buffer_size)
         return MITYA_IMAGE_ERROR_INVALID_ARGUMENT;
 
-    if (_mitya_bytes_per_pixel(desired_type) == 0)
+    if (!mitya_image_valid(image)) return MITYA_IMAGE_ERROR_INVALID_ARGUMENT;
+
+    if (mitya_sample_size(desired_type) == 0)
         return MITYA_IMAGE_ERROR_INVALID_ARGUMENT;
 
     *buffer = NULL;
@@ -387,8 +387,11 @@ mitya_image_result_t mitya_image_save_to_buffer(
 
     if (res != MITYA_IMAGE_SUCCESS) return res;
 
-    _mitya_convert_pixels(image, &tmp);
-    res = codec->encode(&tmp, buffer, buffer_size);
+    res = _mitya_convert_pixels(image, &tmp);
+
+    if (res == MITYA_IMAGE_SUCCESS)
+        res = codec->encode(&tmp, buffer, buffer_size);
+
     mitya_image_destroy(&tmp);
 
     return res;
@@ -447,4 +450,21 @@ uint8_t mitya_image_channels(const mitya_image_t* image) {
 
 mitya_image_pixel_type_t mitya_image_pixel_type(const mitya_image_t* image) {
     return image ? image->type : MITYA_IMAGE_TYPE_U8;
+}
+
+bool mitya_image_valid(const mitya_image_t* im) {
+    if (!im || !im->pixels || !im->width || !im->height || !im->channels)
+        return false;
+
+    size_t ss = mitya_sample_size(im->type);
+    if (ss == 0) return false;
+
+    size_t px = ss * im->channels;
+    if (im->width > SIZE_MAX / px) return false;
+
+    size_t min_stride = (size_t)im->width * px;
+    if (im->row_stride < min_stride) return false;
+    if (im->height > im->data_size / im->row_stride) return false;
+
+    return true;
 }

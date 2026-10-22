@@ -53,7 +53,6 @@ typedef struct {
     mitya_image_pixel_type_t type;
 
     size_t row_stride;
-    size_t plane_stride;
 
     void* pixels;
     size_t data_size;
@@ -68,6 +67,8 @@ typedef struct {
 } mitya_codec_t;
 
 extern const mitya_codec_t* const mitya_codecs[];
+
+size_t mitya_sample_size(mitya_image_pixel_type_t type);
 
 mitya_image_result_t mitya_image_create(mitya_image_t* image, uint32_t width,
                                         uint32_t height, uint8_t channels,
@@ -94,6 +95,7 @@ uint32_t mitya_image_width(const mitya_image_t* image);
 uint32_t mitya_image_height(const mitya_image_t* image);
 uint8_t mitya_image_channels(const mitya_image_t* image);
 mitya_image_pixel_type_t mitya_image_pixel_type(const mitya_image_t* image);
+bool mitya_image_valid(const mitya_image_t* image);
 
 #ifdef __cplusplus
 }

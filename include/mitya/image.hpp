@@ -1,8 +1,13 @@
 #ifndef MITYA_IMAGE_HPP
 #define MITYA_IMAGE_HPP
 
+#if __cplusplus < 202300L
+#error "C++23 or later is required"
+#endif
+
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <expected>
@@ -12,10 +17,6 @@
 #include <vector>
 
 #include "image.h"
-
-#if __cplusplus < 202300L
-#error "C++23 or later is required"
-#endif
 
 namespace mitya {
 
