@@ -68,8 +68,6 @@ typedef struct {
 
 extern const mitya_codec_t* const mitya_codecs[];
 
-size_t mitya_sample_size(mitya_image_pixel_type_t type);
-
 mitya_image_result_t mitya_image_create(mitya_image_t* image, uint32_t width,
                                         uint32_t height, uint8_t channels,
                                         mitya_image_pixel_type_t type);

@@ -16,7 +16,8 @@
 #include <utility>
 #include <vector>
 
-#include "image.h"
+#include "mitya/image.h"
+#include "mitya/ops.h"
 
 namespace mitya {
 
@@ -37,6 +38,22 @@ enum class PixelType : int {
     U32 = MITYA_IMAGE_TYPE_U32,
     F32 = MITYA_IMAGE_TYPE_F32,
     F64 = MITYA_IMAGE_TYPE_F64
+};
+
+struct Point {
+    std::int32_t x, y;
+};
+
+enum class Interpolation : int {
+    Nearest = MITYA_INTERP_NEAREST,
+    Bilinear = MITYA_INTERP_BILINEAR
+};
+
+struct RotateOptions {
+    double angle_deg;
+    Interpolation interp;
+    bool expand;
+    double fill[4];
 };
 
 enum class Format : int {
@@ -87,6 +104,20 @@ inline mitya_image_pixel_type_t to_c(PixelType t) noexcept {
 
 inline mitya_image_format_t to_c(Format f) noexcept {
     return static_cast<mitya_image_format_t>(f);
+}
+
+inline mitya_interp_t to_c(Interpolation i) noexcept {
+    return static_cast<mitya_interp_t>(i);
+}
+
+inline mitya_point_t to_c(Point p) noexcept { return mitya_point_t{p.x, p.y}; }
+
+inline mitya_rotate_opts_t to_c(const RotateOptions& opts) noexcept {
+    return mitya_rotate_opts_t{
+        opts.angle_deg,
+        to_c(opts.interp),
+        opts.expand,
+        {opts.fill[0], opts.fill[1], opts.fill[2], opts.fill[3]}};
 }
 
 inline Result from_c(mitya_image_result_t r) noexcept {
@@ -165,6 +196,50 @@ class Image {
 
     void swap(Image& other) noexcept { std::swap(img_, other.img_); }
     friend void swap(Image& a, Image& b) noexcept { a.swap(b); }
+
+    [[nodiscard]] Expected<Image> crop(Point p0, Point p1) const noexcept {
+        Image out;
+        Result r = detail::from_c(mitya_image_crop(
+            &img_, &out.img_, detail::to_c(p0), detail::to_c(p1)));
+
+        if (r != Result::Success) return detail::fail(r);
+
+        return Expected<Image>(std::move(out));
+    };
+
+    [[nodiscard]] Expected<Image> rotate90(int quarter_turns) const noexcept {
+        Image out;
+        Result r = detail::from_c(
+            mitya_image_rotate90(&img_, &out.img_, quarter_turns));
+
+        if (r != Result::Success) return detail::fail(r);
+
+        return Expected<Image>(std::move(out));
+    }
+
+    [[nodiscard]] Expected<Image> rotate(
+        const RotateOptions& opts) const noexcept {
+        mitya_rotate_opts_t options = detail::to_c(opts);
+
+        Image out;
+        Result r =
+            detail::from_c(mitya_image_rotate(&img_, &out.img_, &options));
+
+        if (r != Result::Success) return detail::fail(r);
+
+        return Expected<Image>(std::move(out));
+    }
+
+    [[nodiscard]] Expected<Image> resize(std::uint32_t w, std::uint32_t h,
+                                         Interpolation interp) const noexcept {
+        Image out;
+        Result r = detail::from_c(
+            mitya_image_resize(&img_, &out.img_, w, h, detail::to_c(interp)));
+
+        if (r != Result::Success) return detail::fail(r);
+
+        return Expected<Image>(std::move(out));
+    }
 
     [[nodiscard]] static Expected<Image> create(
         std::uint32_t width, std::uint32_t height, std::uint8_t channels,

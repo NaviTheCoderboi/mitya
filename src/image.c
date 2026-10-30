@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "mitya/codecs.h"
+#include "mitya/image_internal.h"
 
 #ifdef MITYA_USER_CODECS_HEADER
 
@@ -65,79 +66,6 @@ const mitya_codec_t* const mitya_codecs[] = {
 
 #define MITYA_CODEC_COUNT (sizeof(mitya_codecs) / sizeof(mitya_codecs[0]))
 
-static int _mitya_type_is_float(mitya_image_pixel_type_t type) {
-    return type == MITYA_IMAGE_TYPE_F32 || type == MITYA_IMAGE_TYPE_F64;
-}
-
-size_t mitya_sample_size(mitya_image_pixel_type_t type) {
-    switch (type) {
-        case MITYA_IMAGE_TYPE_U8:
-            return 1;
-        case MITYA_IMAGE_TYPE_U16:
-            return 2;
-        case MITYA_IMAGE_TYPE_U32:
-            return 4;
-        case MITYA_IMAGE_TYPE_F32:
-            return 4;
-        case MITYA_IMAGE_TYPE_F64:
-            return 8;
-        default:
-            return 0;
-    }
-}
-
-static double _mitya_read_pixel_as_double(const void* p,
-                                          mitya_image_pixel_type_t type) {
-    if (!p) return 0.0;
-
-    switch (type) {
-        case MITYA_IMAGE_TYPE_U8:
-            return *(const uint8_t*)p / 255.0;
-        case MITYA_IMAGE_TYPE_U16:
-            return *(const uint16_t*)p / 65535.0;
-        case MITYA_IMAGE_TYPE_U32:
-            return *(const uint32_t*)p / 4294967295.0;
-        case MITYA_IMAGE_TYPE_F32:
-            return *(const float*)p;
-        case MITYA_IMAGE_TYPE_F64:
-            return *(const double*)p;
-        default:
-            return 0.0;
-    }
-}
-
-static void _mitya_write_pixel_from_double(void* p,
-                                           mitya_image_pixel_type_t type,
-                                           double v) {
-    if (!_mitya_type_is_float(type)) {
-        if (!(v >= 0.0)) {
-            v = 0.0;
-        } else if (v > 1.0) {
-            v = 1.0;
-        }
-    }
-
-    switch (type) {
-        case MITYA_IMAGE_TYPE_U8:
-            *(uint8_t*)p = (uint8_t)(v * 255.0 + 0.5);
-            break;
-        case MITYA_IMAGE_TYPE_U16:
-            *(uint16_t*)p = (uint16_t)(v * 65535.0 + 0.5);
-            break;
-        case MITYA_IMAGE_TYPE_U32:
-            *(uint32_t*)p = (uint32_t)(v * 4294967295.0 + 0.5);
-            break;
-        case MITYA_IMAGE_TYPE_F32:
-            *(float*)p = (float)v;
-            break;
-        case MITYA_IMAGE_TYPE_F64:
-            *(double*)p = v;
-            break;
-        default:
-            break;
-    }
-}
-
 static mitya_image_result_t _mitya_convert_pixels(const mitya_image_t* src,
                                                   mitya_image_t* dst) {
     if (!src || !dst || !src->pixels || !dst->pixels)
@@ -168,8 +96,8 @@ static mitya_image_result_t _mitya_convert_pixels(const mitya_image_t* src,
         uint8_t* d = dst_base + (size_t)y * dst->row_stride;
 
         for (size_t i = 0; i < samples_per_row; ++i) {
-            double v = _mitya_read_pixel_as_double(s + i * src_bpp, src->type);
-            _mitya_write_pixel_from_double(d + i * dst_bpp, dst->type, v);
+            double v = mitya_read_sample(s + i * src_bpp, src->type);
+            mitya_write_sample(d + i * dst_bpp, dst->type, v);
         }
     }
 

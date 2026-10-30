@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.21)
 
 project(mitya LANGUAGES C)
 
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(MITYA_ENABLE_PNG "Enable PNG codec" OFF)
@@ -16,7 +20,7 @@ add_library(mitya::mitya ALIAS mitya)
 
 target_sources(mitya PRIVATE
     src/image.c
-    # src/ops.c
+    src/ops.c
 )
 
 target_include_directories(mitya
@@ -28,6 +32,8 @@ target_include_directories(mitya
 
 target_compile_features(mitya PRIVATE c_std_23)
 set_target_properties(mitya PROPERTIES C_EXTENSIONS OFF)
+
+target_link_libraries(mitya PRIVATE $<$<BOOL:${UNIX}>:m>)
 
 if(NOT MSVC)
     target_compile_options(mitya PRIVATE -Wall -Wextra -Wpedantic)
@@ -42,7 +48,7 @@ if(MITYA_ENABLE_PNG)
     find_package(PNG REQUIRED)
     target_sources(mitya PRIVATE src/codec_png.c)
     target_compile_definitions(mitya PRIVATE MITYA_ENABLE_PNG)
-    target_link_libraries(mitya PRIVATE PNG::PNG $<$<BOOL:${UNIX}>:m>)
+    target_link_libraries(mitya PRIVATE PNG::PNG)
 endif()
 
 if(MITYA_ENABLE_PNM)
@@ -53,14 +59,14 @@ endif()
 if(MITYA_BUILD_EXAMPLES)
     enable_language(CXX)
 
-    foreach(ex chessboard empty)
+    foreach(ex chessboard empty crop rotate resize)
         add_executable(${ex} examples/${ex}.cpp)
         target_link_libraries(${ex} PRIVATE mitya)
         target_compile_features(${ex} PRIVATE cxx_std_23)
         set_target_properties(${ex} PROPERTIES CXX_EXTENSIONS OFF)
 
         if(NOT MSVC)
-            target_compile_options(${ex} PRIVATE -Wall -Wextra -Wpedantic)
+            target_compile_options(${ex} PRIVATE -Wall -Wextra -Wpedantic -O3 -march=native)
         endif()
     endforeach()
 endif()
