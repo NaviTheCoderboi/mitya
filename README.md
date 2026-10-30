@@ -5,7 +5,7 @@
 A small modular image loading and saving library for C and C++, built around a plain C core with a header-only C++23 wrapper.
 
 **Formats:** PNG (via libpng, optional) and PNM (PPM/PGM, ASCII `P2`/`P3` and binary `P5`/`P6`).
-Additional formats can be plugged in at b`uild time with the user-codec hook — see [User-defined codecs](#user-defined-codecs).
+Additional formats can be plugged in at build time with the user-codec hook — see [User-defined codecs](#user-defined-codecs).
 
 ## Features
 
@@ -15,12 +15,14 @@ Additional formats can be plugged in at b`uild time with the user-codec hook —
 - **Pluggable codecs** — register your own `mitya_codec_t` via one macro define; new formats appear as real enum constants (`MITYA_IMAGE_FORMAT_QOI`, `mitya::Format::QOI`) with LSP completion.
 - **No exceptions in the C core** — error codes throughout; the C++ wrapper converts them to `std::expected`.
 - **Single allocation per image**, owned by the library, freed with `mitya_image_destroy` / RAII in C++.
+- **Image operations**: crop, rotation (lossless 90° steps or any angle), resize and invert, for every pixel type. Interpolation is nearest or bilinear.
 
 ## Requirements
 
-- CMake 3.14 or later
+- CMake 3.21 or later
 - A C23-capable C compiler and a C++23-capable C++ compiler (the C++ wrapper needs `std::expected`)
-- libpng — only if `MITYA_ENABLE_PNG` is `ON`
+- libpng, only if `MITYA_ENABLE_PNG` is `ON`
+- libm (linked automatically on Unix)
 
 ## Building
 
@@ -29,12 +31,16 @@ cmake -B build
 cmake --build build
 ```
 
+If you don't pass `-DCMAKE_BUILD_TYPE`, mitya builds in **Release**. Debug builds are roughly 4x slower for pixel operations because nothing is inlined.
+
 ### CMake options
 
-| Option | Default | Description |
-| ------------------ | ------- | --------------------------------------------- |
-| `MITYA_ENABLE_PNG` | `OFF` | Build the PNG codec (requires libpng) |
-| `MITYA_ENABLE_PNM` | `OFF` | Build the PNM (PPM/PGM) codec |
+| Option                      | Default                          | Description                                           |
+| --------------------------- | -------------------------------- | ------------------------------------------------------|
+| `MITYA_ENABLE_PNG`          | `OFF`                            | Build the PNG codec (requires libpng)                 |
+| `MITYA_ENABLE_PNM`          | `OFF`                            | Build the PNM (PPM/PGM) codec                         |
+| `MITYA_BUILD_EXAMPLES`      | `ON` if top-level, else `OFF`    | Build the example programs                            |
+| `MITYA_USER_CODECS_HEADER`  | empty                            | Header defining `MITYA_USER_CODECS` (see user codecs) |
 
 Disable a codec with e.g. `-DMITYA_ENABLE_PNG=OFF`.
 
@@ -187,6 +193,124 @@ void mitya_buffer_free(void** buffer); /* frees a buffer from save_to_buffer */
 - Buffers returned by `mitya_image_save_to_buffer` are `malloc`'d — release them **only** with `mitya_buffer_free` (which also nulls the pointer).
 - Buffers returned by a user codec's `encode` follow the same rule.
 
+### Image operations
+
+Header: `mitya/ops.h` (included by `mitya/image.hpp` in C++).
+
+All operations work on every pixel type and any channel count. Output images keep the source's type and channel count.
+
+#### Types
+
+```c
+typedef struct { int32_t x, y; } mitya_point_t;
+
+typedef enum {
+	MITYA_INTERP_NEAREST,  /* fast, exact, jagged edges when rotating/scaling */
+	MITYA_INTERP_BILINEAR  /* smooth, blends the 4 nearest pixels */
+} mitya_interp_t;
+
+typedef struct {
+	double angle_deg;      /* positive = clockwise on screen */
+	mitya_interp_t interp;
+	int expand;            /* 1: grow canvas to fit the whole image; 0: keep source size */
+	double fill[4];        /* background per channel, normalized 0..1 */
+} mitya_rotate_opts_t;
+```
+
+A zero-initialized `mitya_rotate_opts_t` means 0°, nearest, no expand, fill with zeros (black, transparent if the image has alpha).
+
+#### Out-of-place operations
+
+These allocate `dst`. `src` and `dst` must be different images. If `dst` already holds an image, destroy it first, otherwise its memory leaks. On failure there is nothing to free. Free `dst` with `mitya_image_destroy` on success.
+
+```c
+mitya_image_result_t mitya_image_crop(const mitya_image_t* src, mitya_image_t* dst,
+                                      mitya_point_t p0, mitya_point_t p1);
+
+mitya_image_result_t mitya_image_rotate90(const mitya_image_t* src, mitya_image_t* dst,
+                                          int quarter_turns);
+
+mitya_image_result_t mitya_image_rotate(const mitya_image_t* src, mitya_image_t* dst,
+                                        const mitya_rotate_opts_t* opts);
+
+mitya_image_result_t mitya_image_resize(const mitya_image_t* src, mitya_image_t* dst,
+                                        uint32_t width, uint32_t height,
+                                        mitya_interp_t interp);
+```
+
+| Function | Behavior |
+| -------- | -------- |
+| `crop` | `p0` and `p1` are opposite corners in any order. The near side is inclusive and the far side exclusive, so the result is `(max.x - min.x) x (max.y - min.y)`. Both points must lie within `[0, width]` x `[0, height]` and the area must be non-empty, otherwise `INVALID_ARGUMENT`. |
+| `rotate90` | Lossless. `quarter_turns > 0` is clockwise, negative is counter-clockwise, and any integer is accepted (taken mod 4). 1 and 3 swap width and height. |
+| `rotate` | Rotates by any angle. With `expand = 1` the canvas grows to `ceil(\|w·cos θ\| + \|h·sin θ\|)` by `ceil(\|w·sin θ\| + \|h·cos θ\|)` so nothing is cut off. With `expand = 0` the size stays the same and the corners are cropped. Areas not covered by the source get `fill`. Angles that are exact multiples of 90 with `expand = 1` take the lossless `rotate90` path. `angle_deg` must be finite. |
+| `resize` | Scales to `width` x `height`. Both must be non-zero. |
+
+#### In-place operations
+
+```c
+mitya_image_result_t mitya_image_flip_horizontal(mitya_image_t* image);
+mitya_image_result_t mitya_image_flip_vertical(mitya_image_t* image);
+mitya_image_result_t mitya_image_invert(mitya_image_t* image);
+```
+
+`invert` maps each value `v` to its complement (`255 - v` for U8, `65535 - v` for U16, `UINT32_MAX - v` for U32, `1.0 - v` for float types, which are treated as 0..1). On 2- and 4-channel images the **alpha channel is left unchanged**.
+
+#### Example (C)
+
+```c
+mitya_image_t img, out;
+mitya_image_load_from_file(&img, "photo.png", MITYA_IMAGE_FORMAT_UNKNOWN, MITYA_IMAGE_TYPE_U8);
+
+mitya_rotate_opts_t opts = {
+	.angle_deg = 30.0,
+	.interp = MITYA_INTERP_BILINEAR,
+	.expand = 1,
+	.fill = {0, 0, 0, 0},
+};
+
+if (mitya_image_rotate(&img, &out, &opts) == MITYA_IMAGE_SUCCESS) {
+	mitya_image_save_to_file(&out, "rotated.png", MITYA_IMAGE_FORMAT_PNG, MITYA_IMAGE_TYPE_U8);
+	mitya_image_destroy(&out);
+}
+
+mitya_image_destroy(&img);
+```
+
+#### Example (C++)
+
+Each operation returns a new `Expected<Image>`. Flips and invert return `Status`, since they modify the image in place.
+
+```cpp
+auto img = mitya::Image::load("photo.png");
+if (!img) return 1;
+
+auto cropped = img->crop({10, 10}, {210, 110});            // 200x100 region
+auto turned  = img->rotate90(1);                           // 90° clockwise
+auto rotated = img->rotate({.angle_deg = 45.0,
+                            .interp = mitya::Interpolation::Bilinear,
+                            .expand = true,
+                            .fill = {0, 0, 0, 0}});
+auto small   = img->resize(320, 240, mitya::Interpolation::Bilinear);
+
+img->flip_horizontal();   // Status, in place
+img->invert();            // Status, in place
+
+if (!rotated) {
+	std::cerr << mitya::to_string(rotated.error()) << '\n';
+	return 1;
+}
+rotated->save("rotated.png");
+```
+
+#### Notes
+
+- **Coordinates:** the origin is the top-left corner, `x` grows right and `y` grows down.
+- **Nearest vs bilinear:** nearest copies the closest source pixel (exact values, no blending). Bilinear blends neighbors and looks smoother on rotation and upscaling.
+- **Bilinear and alpha:** channels are blended independently without premultiplied alpha, so soft alpha edges may show a faint fringe after rotation.
+- **Bilinear downscaling:** large downscale factors can alias, because only 4 source pixels are sampled per output pixel.
+- **Edges:** pixels outside the source use `fill`. The boundary is hard, not anti-aliased.
+- **Performance:** build in Release. A 2250x750 image rotated by 45° with bilinear interpolation takes on the order of 100 ms in a Release build.
+
 ### The image struct
 
 ```c
@@ -197,9 +321,8 @@ typedef struct {
 	mitya_image_pixel_type_t type; /* U8, U16, U32, F32 or F64 */
 
 	size_t row_stride; /* bytes between consecutive rows */
-	size_t plane_stride; /* same as row_stride (single-plane layout) */
 
-	void* pixels; /* row-major, tightly packed per row */
+	void* pixels; /* row-major, interleaved channels */
 	size_t data_size; /* total allocated bytes */
 } mitya_image_t;
 ```
@@ -215,6 +338,7 @@ Row `y` starts at `(uint8_t*)pixels + y * row_stride`. Channels are interleaved
 - `image.save(path)` — format inferred from the extension (`.png`, `.ppm`, `.pgm`, `.pnm`).
 - `image.encode(format)` — return the encoded file as `std::vector<uint8_t>`.
 - `Image::adopt(mitya_image_t&)` / `image.release()` — transfer ownership to or from the C API.
+- `image.crop(p0, p1)`, `image.rotate90(n)`, `image.rotate(opts)`, `image.resize(w, h, interp)`, `image.flip_horizontal()`, `image.flip_vertical()`, `image.invert()`, see [Image operations](#image-operations).
 
 ### Format support matrix
 
@@ -296,9 +420,11 @@ Codec contract:
 After `FetchContent_MakeAvailable(mitya)` (use the real library target name):
 ```cmake
 target_sources(mitya PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/qoi.c)
+```
 
-target_compile_definitions(mitya PUBLIC
-	"MITYA_USER_CODECS_HEADER=\"${CMAKE_CURRENT_SOURCE_DIR}/my_codecs.h\"")
+When configuring cmake
+```sh
+cmake -B build -DMITYA_USER_CODECS_HEADER=/abs/path/my_codecs.h
 ```
 
 Without CMake, pass the define on every compile that touches mitya:
