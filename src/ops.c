@@ -228,3 +228,29 @@ mitya_image_result_t mitya_image_resize(const mitya_image_t* src,
 
     return MITYA_IMAGE_SUCCESS;
 }
+
+mitya_image_result_t mitya_image_invert(mitya_image_t* image) {
+    if (!mitya_image_valid(image)) return MITYA_IMAGE_ERROR_INVALID_ARGUMENT;
+
+    size_t ss = mitya_sample_size(image->type);
+    size_t ch = image->channels;
+
+    size_t color_ch = (ch == 2 || ch == 4) ? ch - 1 : ch;
+
+    for (uint32_t y = 0; y < image->height; ++y) {
+        uint8_t* row = (uint8_t*)image->pixels + (size_t)y * image->row_stride;
+
+        for (uint32_t x = 0; x < image->width; ++x) {
+            uint8_t* px = row + (size_t)x * ch * ss;
+
+            for (size_t c = 0; c < color_ch; ++c) {
+                void* p = px + c * ss;
+                double v = mitya_read_sample(p, image->type);
+
+                mitya_write_sample(p, image->type, 1.0 - v);
+            }
+        }
+    }
+
+    return MITYA_IMAGE_SUCCESS;
+}

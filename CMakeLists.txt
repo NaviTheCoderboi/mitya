@@ -59,7 +59,7 @@ endif()
 if(MITYA_BUILD_EXAMPLES)
     enable_language(CXX)
 
-    foreach(ex chessboard empty crop rotate resize)
+    foreach(ex chessboard empty crop rotate resize invert)
         add_executable(${ex} examples/${ex}.cpp)
         target_link_libraries(${ex} PRIVATE mitya)
         target_compile_features(${ex} PRIVATE cxx_std_23)

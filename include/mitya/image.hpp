@@ -241,6 +241,10 @@ class Image {
         return Expected<Image>(std::move(out));
     }
 
+    [[nodiscard]] Status invert() noexcept {
+        return detail::to_status(mitya_image_invert(&img_));
+    }
+
     [[nodiscard]] static Expected<Image> create(
         std::uint32_t width, std::uint32_t height, std::uint8_t channels,
         PixelType type = PixelType::U8) noexcept {

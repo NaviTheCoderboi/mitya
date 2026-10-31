@@ -39,8 +39,7 @@ mitya_image_result_t mitya_image_resize(const mitya_image_t* src,
                                         mitya_image_t* dst, uint32_t w,
                                         uint32_t h, mitya_interp_t interp);
 
-// mitya_image_result_t mitya_image_flip_horizontal(mitya_image_t* image);
-// mitya_image_result_t mitya_image_flip_vertical(mitya_image_t* image);
+mitya_image_result_t mitya_image_invert(mitya_image_t* image);
 
 #ifdef __cplusplus
 }

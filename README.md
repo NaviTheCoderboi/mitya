@@ -248,8 +248,6 @@ mitya_image_result_t mitya_image_resize(const mitya_image_t* src, mitya_image_t*
 #### In-place operations
 
 ```c
-mitya_image_result_t mitya_image_flip_horizontal(mitya_image_t* image);
-mitya_image_result_t mitya_image_flip_vertical(mitya_image_t* image);
 mitya_image_result_t mitya_image_invert(mitya_image_t* image);
 ```
 
@@ -278,7 +276,7 @@ mitya_image_destroy(&img);
 
 #### Example (C++)
 
-Each operation returns a new `Expected<Image>`. Flips and invert return `Status`, since they modify the image in place.
+Each operation returns a new `Expected<Image>`. Invert return `Status`, since they modify the image in place.
 
 ```cpp
 auto img = mitya::Image::load("photo.png");
@@ -292,7 +290,6 @@ auto rotated = img->rotate({.angle_deg = 45.0,
                             .fill = {0, 0, 0, 0}});
 auto small   = img->resize(320, 240, mitya::Interpolation::Bilinear);
 
-img->flip_horizontal();   // Status, in place
 img->invert();            // Status, in place
 
 if (!rotated) {
@@ -338,7 +335,7 @@ Row `y` starts at `(uint8_t*)pixels + y * row_stride`. Channels are interleaved
 - `image.save(path)` — format inferred from the extension (`.png`, `.ppm`, `.pgm`, `.pnm`).
 - `image.encode(format)` — return the encoded file as `std::vector<uint8_t>`.
 - `Image::adopt(mitya_image_t&)` / `image.release()` — transfer ownership to or from the C API.
-- `image.crop(p0, p1)`, `image.rotate90(n)`, `image.rotate(opts)`, `image.resize(w, h, interp)`, `image.flip_horizontal()`, `image.flip_vertical()`, `image.invert()`, see [Image operations](#image-operations).
+- `image.crop(p0, p1)`, `image.rotate90(n)`, `image.rotate(opts)`, `image.resize(w, h, interp)`, `image.invert()`, see [Image operations](#image-operations).
 
 ### Format support matrix
 
